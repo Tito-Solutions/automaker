@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Feature } from "@/store/app-store";
+import { Feature, useAppStore } from "@/store/app-store";
 import {
   GripVertical,
   Edit,
@@ -94,6 +94,12 @@ export function KanbanCard({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSummaryDialogOpen, setIsSummaryDialogOpen] = useState(false);
   const [agentInfo, setAgentInfo] = useState<AgentTaskInfo | null>(null);
+  const { kanbanCardDetailLevel } = useAppStore();
+
+  // Helper functions to check what should be shown based on detail level
+  const showSteps = kanbanCardDetailLevel === "standard" || kanbanCardDetailLevel === "detailed";
+  const showAgentInfo = kanbanCardDetailLevel === "detailed";
+  const showProgressBar = kanbanCardDetailLevel === "standard" || kanbanCardDetailLevel === "detailed";
 
   // Load context file for in_progress, waiting_approval, and verified features
   useEffect(() => {
@@ -261,8 +267,8 @@ export function KanbanCard({
         </div>
       </CardHeader>
       <CardContent className="p-3 pt-0">
-        {/* Steps Preview */}
-        {feature.steps.length > 0 && (
+        {/* Steps Preview - Show in Standard and Detailed modes */}
+        {showSteps && feature.steps.length > 0 && (
           <div className="mb-3 space-y-1">
             {feature.steps.slice(0, 3).map((step, index) => (
               <div
@@ -286,9 +292,25 @@ export function KanbanCard({
         )}
 
         {/* Agent Info Panel - shows for in_progress, waiting_approval, verified */}
-        {feature.status !== "backlog" && agentInfo && (
+        {/* Standard mode: Only show progress bar */}
+        {showProgressBar && !showAgentInfo && feature.status !== "backlog" && agentInfo && (isCurrentAutoTask || feature.status === "in_progress") && (
+          <div className="mb-3 space-y-1">
+            <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="w-full h-full bg-primary transition-transform duration-500 ease-out origin-left"
+                style={{ transform: `translateX(${agentInfo.progressPercentage - 100}%)` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>{Math.round(agentInfo.progressPercentage)}%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Detailed mode: Show all agent info */}
+        {showAgentInfo && feature.status !== "backlog" && agentInfo && (
           <div className="mb-3 space-y-2">
-            {/* Model & Progress Bar */}
+            {/* Model & Phase */}
             <div className="flex items-center gap-2 text-xs">
               <div className="flex items-center gap-1 text-cyan-400">
                 <Cpu className="w-3 h-3" />

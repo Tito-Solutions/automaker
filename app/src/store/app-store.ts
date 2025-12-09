@@ -4,6 +4,7 @@ import type { Project } from "@/lib/electron";
 
 export type ViewMode = "welcome" | "spec" | "board" | "agent" | "settings" | "tools" | "interview" | "context";
 export type ThemeMode = "light" | "dark" | "system";
+export type KanbanCardDetailLevel = "minimal" | "standard" | "detailed";
 
 export interface ApiKeys {
   anthropic: string;
@@ -98,6 +99,9 @@ export interface AppState {
   runningAutoTasks: string[]; // Feature IDs being worked on (supports concurrent tasks)
   autoModeActivityLog: AutoModeActivity[];
   maxConcurrency: number; // Maximum number of concurrent agent tasks
+
+  // Kanban Card Display Settings
+  kanbanCardDetailLevel: KanbanCardDetailLevel; // Level of detail shown on kanban cards
 }
 
 export interface AutoModeActivity {
@@ -162,6 +166,9 @@ export interface AppActions {
   clearAutoModeActivity: () => void;
   setMaxConcurrency: (max: number) => void;
 
+  // Kanban Card Settings actions
+  setKanbanCardDetailLevel: (level: KanbanCardDetailLevel) => void;
+
   // Reset
   reset: () => void;
 }
@@ -186,6 +193,7 @@ const initialState: AppState = {
   runningAutoTasks: [],
   autoModeActivityLog: [],
   maxConcurrency: 3, // Default to 3 concurrent agents
+  kanbanCardDetailLevel: "standard", // Default to standard detail level
 };
 
 export const useAppStore = create<AppState & AppActions>()(
@@ -400,6 +408,9 @@ export const useAppStore = create<AppState & AppActions>()(
 
       setMaxConcurrency: (max) => set({ maxConcurrency: max }),
 
+      // Kanban Card Settings actions
+      setKanbanCardDetailLevel: (level) => set({ kanbanCardDetailLevel: level }),
+
       // Reset
       reset: () => set(initialState),
     }),
@@ -415,6 +426,7 @@ export const useAppStore = create<AppState & AppActions>()(
         chatSessions: state.chatSessions,
         chatHistoryOpen: state.chatHistoryOpen,
         maxConcurrency: state.maxConcurrency,
+        kanbanCardDetailLevel: state.kanbanCardDetailLevel,
       }),
     }
   )
