@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { ImageIcon, X, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,9 @@ export interface FeatureImagePath {
   mimeType: string;
 }
 
+// Map to store preview data by image ID (persisted across component re-mounts)
+export type ImagePreviewMap = Map<string, string>;
+
 interface DescriptionImageDropZoneProps {
   value: string;
   onChange: (value: string) => void;
@@ -24,6 +27,9 @@ interface DescriptionImageDropZoneProps {
   disabled?: boolean;
   maxFiles?: number;
   maxFileSize?: number; // in bytes, default 10MB
+  // Optional: pass preview map from parent to persist across tab switches
+  previewMap?: ImagePreviewMap;
+  onPreviewMapChange?: (map: ImagePreviewMap) => void;
 }
 
 const ACCEPTED_IMAGE_TYPES = [
@@ -45,12 +51,31 @@ export function DescriptionImageDropZone({
   disabled = false,
   maxFiles = 5,
   maxFileSize = DEFAULT_MAX_FILE_SIZE,
+  previewMap,
+  onPreviewMapChange,
 }: DescriptionImageDropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [previewImages, setPreviewImages] = useState<Map<string, string>>(
-    new Map()
+  // Use parent-provided preview map if available, otherwise use local state
+  const [localPreviewImages, setLocalPreviewImages] = useState<Map<string, string>>(
+    () => new Map()
   );
+
+  // Determine which preview map to use - prefer parent-controlled state
+  const previewImages = previewMap !== undefined ? previewMap : localPreviewImages;
+  const setPreviewImages = useCallback((updater: Map<string, string> | ((prev: Map<string, string>) => Map<string, string>)) => {
+    if (onPreviewMapChange) {
+      const currentMap = previewMap !== undefined ? previewMap : localPreviewImages;
+      const newMap = typeof updater === 'function' ? updater(currentMap) : updater;
+      onPreviewMapChange(newMap);
+    } else {
+      setLocalPreviewImages((prev) => {
+        const newMap = typeof updater === 'function' ? updater(prev) : updater;
+        return newMap;
+      });
+    }
+  }, [onPreviewMapChange, previewMap, localPreviewImages]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentProject = useAppStore((state) => state.currentProject);
 

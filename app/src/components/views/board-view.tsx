@@ -41,6 +41,7 @@ import { FeatureImageUpload } from "@/components/ui/feature-image-upload";
 import {
   DescriptionImageDropZone,
   FeatureImagePath as DescriptionImagePath,
+  ImagePreviewMap,
 } from "@/components/ui/description-image-dropzone";
 import {
   Dialog,
@@ -197,6 +198,13 @@ export function BoardView() {
   const [followUpImagePaths, setFollowUpImagePaths] = useState<
     DescriptionImagePath[]
   >([]);
+  // Preview maps to persist image previews across tab switches
+  const [newFeaturePreviewMap, setNewFeaturePreviewMap] = useState<ImagePreviewMap>(
+    () => new Map()
+  );
+  const [followUpPreviewMap, setFollowUpPreviewMap] = useState<ImagePreviewMap>(
+    () => new Map()
+  );
 
   // Make current project available globally for modal
   useEffect(() => {
@@ -716,6 +724,8 @@ export function BoardView() {
       model: "opus",
       thinkingLevel: "none",
     });
+    // Clear the preview map when the feature is added
+    setNewFeaturePreviewMap(new Map());
     setShowAddDialog(false);
   };
 
@@ -991,6 +1001,7 @@ export function BoardView() {
     setFollowUpFeature(null);
     setFollowUpPrompt("");
     setFollowUpImagePaths([]);
+    setFollowUpPreviewMap(new Map());
 
     // Show success toast immediately
     toast.success("Follow-up started", {
@@ -1485,7 +1496,13 @@ export function BoardView() {
       </div>
 
       {/* Add Feature Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => {
+        setShowAddDialog(open);
+        // Clear preview map when dialog closes
+        if (!open) {
+          setNewFeaturePreviewMap(new Map());
+        }
+      }}>
         <DialogContent
           compact={!isMaximized}
           data-testid="add-feature-dialog"
@@ -1536,6 +1553,8 @@ export function BoardView() {
                     setNewFeature({ ...newFeature, imagePaths: images })
                   }
                   placeholder="Describe the feature..."
+                  previewMap={newFeaturePreviewMap}
+                  onPreviewMapChange={setNewFeaturePreviewMap}
                 />
               </div>
               <div className="space-y-2">
@@ -2077,6 +2096,7 @@ export function BoardView() {
             setFollowUpFeature(null);
             setFollowUpPrompt("");
             setFollowUpImagePaths([]);
+            setFollowUpPreviewMap(new Map());
           }
         }}
       >
@@ -2115,6 +2135,8 @@ export function BoardView() {
                 images={followUpImagePaths}
                 onImagesChange={setFollowUpImagePaths}
                 placeholder="Describe what needs to be fixed or changed..."
+                previewMap={followUpPreviewMap}
+                onPreviewMapChange={setFollowUpPreviewMap}
               />
             </div>
             <p className="text-xs text-muted-foreground">
@@ -2130,6 +2152,7 @@ export function BoardView() {
                 setFollowUpFeature(null);
                 setFollowUpPrompt("");
                 setFollowUpImagePaths([]);
+                setFollowUpPreviewMap(new Map());
               }}
             >
               Cancel

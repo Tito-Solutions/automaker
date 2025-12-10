@@ -205,5 +205,37 @@
     "skipTests": true,
     "model": "sonnet",
     "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765360665626-u2vhr80aa",
+    "category": "Uncategorized",
+    "description": "I dont want you to change any code describe what u see in attached image",
+    "steps": [],
+    "status": "backlog",
+    "startedAt": "2025-12-10T09:57:47.494Z",
+    "imagePaths": [
+      {
+        "id": "img-1765360662146-d5qi79j88",
+        "path": "/Users/shirone/Library/Application Support/automaker/images/1765360662144-2pt9bt1u4_image-test.png",
+        "filename": "image-test.png",
+        "mimeType": "image/png"
+      }
+    ],
+    "skipTests": true,
+    "model": "gpt-5.1-codex",
+    "thinkingLevel": "none"
+  },
+  {
+    "id": "feature-1765360739103-3h218d1nn",
+    "category": "Kanban",
+    "description": "When u write new feature for ai agent and attacht context images and change tab to choose diff model and go back to prompt tab the image preview break and im not sure if it even saved properly in state to be later attached check it out for me",
+    "steps": [],
+    "status": "waiting_approval",
+    "startedAt": "2025-12-10T09:59:02.988Z",
+    "imagePaths": [],
+    "skipTests": true,
+    "summary": "Fixed image preview breaking when switching tabs in Add Feature modal. Added previewMap/onPreviewMapChange props to DescriptionImageDropZone component to lift preview state up to parent. Modified: description-image-dropzone.tsx (added parent-controlled state support), board-view.tsx (added newFeaturePreviewMap and followUpPreviewMap state, wired up to DescriptionImageDropZone). Image paths were already stored correctly in state - only the preview thumbnails (base64) were lost on tab switch due to component unmounting.",
+    "model": "opus",
+    "thinkingLevel": "high"
   }
 ]
