@@ -16,26 +16,26 @@ import dotenv from "dotenv";
 import { createEventEmitter, type EventEmitter } from "./lib/events.js";
 import { initAllowedPaths } from "./lib/security.js";
 import { authMiddleware, getAuthStatus } from "./lib/auth.js";
-import { createFsRoutes } from "./routes/fs.js";
-import { createHealthRoutes } from "./routes/health.js";
-import { createAgentRoutes } from "./routes/agent.js";
-import { createSessionsRoutes } from "./routes/sessions.js";
-import { createFeaturesRoutes } from "./routes/features.js";
-import { createAutoModeRoutes } from "./routes/auto-mode.js";
-import { createWorktreeRoutes } from "./routes/worktree.js";
-import { createGitRoutes } from "./routes/git.js";
-import { createSetupRoutes } from "./routes/setup.js";
-import { createSuggestionsRoutes } from "./routes/suggestions.js";
-import { createModelsRoutes } from "./routes/models.js";
-import { createRunningAgentsRoutes } from "./routes/running-agents.js";
-import { createWorkspaceRoutes } from "./routes/workspace.js";
-import { createTemplatesRoutes } from "./routes/templates.js";
+import { createFsRoutes } from "./routes/fs/index.js";
+import { createHealthRoutes } from "./routes/health/index.js";
+import { createAgentRoutes } from "./routes/agent/index.js";
+import { createSessionsRoutes } from "./routes/sessions/index.js";
+import { createFeaturesRoutes } from "./routes/features/index.js";
+import { createAutoModeRoutes } from "./routes/auto-mode/index.js";
+import { createWorktreeRoutes } from "./routes/worktree/index.js";
+import { createGitRoutes } from "./routes/git/index.js";
+import { createSetupRoutes } from "./routes/setup/index.js";
+import { createSuggestionsRoutes } from "./routes/suggestions/index.js";
+import { createModelsRoutes } from "./routes/models/index.js";
+import { createRunningAgentsRoutes } from "./routes/running-agents/index.js";
+import { createWorkspaceRoutes } from "./routes/workspace/index.js";
+import { createTemplatesRoutes } from "./routes/templates/index.js";
 import {
   createTerminalRoutes,
   validateTerminalToken,
   isTerminalEnabled,
   isTerminalPasswordRequired,
-} from "./routes/terminal.js";
+} from "./routes/terminal/index.js";
 import { AgentService } from "./services/agent-service.js";
 import { FeatureLoader } from "./services/feature-loader.js";
 import { AutoModeService } from "./services/auto-mode-service.js";

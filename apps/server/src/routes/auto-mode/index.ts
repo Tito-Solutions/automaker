@@ -1,0 +1,40 @@
+/**
+ * Auto Mode routes - HTTP API for autonomous feature implementation
+ *
+ * Uses the AutoModeService for real feature execution with Claude Agent SDK
+ */
+
+import { Router } from "express";
+import type { AutoModeService } from "../../services/auto-mode-service.js";
+import { createStartHandler } from "./routes/start.js";
+import { createStopHandler } from "./routes/stop.js";
+import { createStopFeatureHandler } from "./routes/stop-feature.js";
+import { createStatusHandler } from "./routes/status.js";
+import { createRunFeatureHandler } from "./routes/run-feature.js";
+import { createVerifyFeatureHandler } from "./routes/verify-feature.js";
+import { createResumeFeatureHandler } from "./routes/resume-feature.js";
+import { createContextExistsHandler } from "./routes/context-exists.js";
+import { createAnalyzeProjectHandler } from "./routes/analyze-project.js";
+import { createFollowUpFeatureHandler } from "./routes/follow-up-feature.js";
+import { createCommitFeatureHandler } from "./routes/commit-feature.js";
+
+export function createAutoModeRoutes(autoModeService: AutoModeService): Router {
+  const router = Router();
+
+  router.post("/start", createStartHandler(autoModeService));
+  router.post("/stop", createStopHandler(autoModeService));
+  router.post("/stop-feature", createStopFeatureHandler(autoModeService));
+  router.post("/status", createStatusHandler(autoModeService));
+  router.post("/run-feature", createRunFeatureHandler(autoModeService));
+  router.post("/verify-feature", createVerifyFeatureHandler(autoModeService));
+  router.post("/resume-feature", createResumeFeatureHandler(autoModeService));
+  router.post("/context-exists", createContextExistsHandler(autoModeService));
+  router.post("/analyze-project", createAnalyzeProjectHandler(autoModeService));
+  router.post(
+    "/follow-up-feature",
+    createFollowUpFeatureHandler(autoModeService)
+  );
+  router.post("/commit-feature", createCommitFeatureHandler(autoModeService));
+
+  return router;
+}
