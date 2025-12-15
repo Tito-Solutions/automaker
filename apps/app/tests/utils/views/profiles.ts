@@ -61,19 +61,8 @@ export async function getBuiltInProfiles(page: Page): Promise<Locator> {
  * Count the number of custom profiles
  */
 export async function countCustomProfiles(page: Page): Promise<number> {
-  // Count profiles by checking each one for the "Built-in" text
-  const allCards = await page.locator('[data-testid^="profile-card-"]').all();
-  let customCount = 0;
-
-  for (const card of allCards) {
-    const builtInText = card.locator('text="Built-in"');
-    const isBuiltIn = (await builtInText.count()) > 0;
-    if (!isBuiltIn) {
-      customCount++;
-    }
-  }
-
-  return customCount;
+  const customProfiles = await getCustomProfiles(page);
+  return customProfiles.count();
 }
 
 /**

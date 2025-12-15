@@ -643,24 +643,23 @@ test.describe("AI Profiles View", () => {
       await waitForSuccessToast(page, "Profile created");
     });
 
-    test("should hide thinking level when model doesn't support it", async ({
+    test("should show thinking level controls when model supports it", async ({
       page,
     }) => {
       await clickNewProfileButton(page);
 
-      // Select Haiku model (doesn't support thinking)
-      await selectModel(page, "haiku");
+      // Select a model that supports thinking (all current models do)
+      await selectModel(page, "opus");
 
-      // Thinking level selector should not be visible
+      // Verify that the thinking level section is visible
+      const thinkingLevelLabel = page.locator('text="Thinking Level"');
+      await expect(thinkingLevelLabel).toBeVisible();
+
+      // Verify thinking level options are available
       const thinkingSelector = page.locator(
         '[data-testid^="thinking-select-"]'
       );
-      const count = await thinkingSelector.count();
-
-      // Note: Haiku supports thinking levels too, so this test may need adjustment
-      // Based on the actual implementation. For now, we'll check if at least
-      // some thinking options are visible
-      expect(count).toBeGreaterThanOrEqual(0);
+      await expect(thinkingSelector.first()).toBeVisible();
     });
   });
 
