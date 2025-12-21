@@ -77,28 +77,36 @@ Path validation and security checks.
 ```typescript
 import {
   initAllowedPaths,
-  addAllowedPath,
   isPathAllowed,
   validatePath,
-  getAllowedPaths
+  getAllowedPaths,
+  getAllowedRootDirectory,
+  getDataDirectory,
+  PathNotAllowedError
 } from '@automaker/platform';
 
 // Initialize allowed paths from environment
+// Reads ALLOWED_ROOT_DIRECTORY and DATA_DIR environment variables
 initAllowedPaths();
-
-// Add custom allowed path
-addAllowedPath('/custom/path');
 
 // Check if path is allowed
 if (isPathAllowed('/project/path')) {
   console.log('Path is allowed');
 }
 
-// Validate and normalize path
-const safePath = validatePath('/requested/path');
+// Validate and normalize path (throws PathNotAllowedError if not allowed)
+try {
+  const safePath = validatePath('/requested/path');
+} catch (error) {
+  if (error instanceof PathNotAllowedError) {
+    console.error('Access denied:', error.message);
+  }
+}
 
-// Get all allowed paths
-const allowed = getAllowedPaths();
+// Get configured directories
+const rootDir = getAllowedRootDirectory(); // or null if not configured
+const dataDir = getDataDirectory(); // or null if not configured
+const allowed = getAllowedPaths(); // array of all allowed paths
 ```
 
 ## Usage Example
@@ -139,33 +147,44 @@ async function executeFeature(projectPath: string, featureId: string) {
 
 ## Security Model
 
-**IMPORTANT: Path validation is currently disabled.**
+Path security is enforced through two environment variables:
 
-All path access checks (`isPathAllowed()`) always return `true`, allowing unrestricted file system access. This is a deliberate design decision for the following reasons:
+### Environment Variables
 
-### Rationale
+- **ALLOWED_ROOT_DIRECTORY**: Primary security boundary. When set, all file operations must be within this directory.
+- **DATA_DIR**: Application data directory (settings, credentials). Always allowed regardless of ALLOWED_ROOT_DIRECTORY.
 
-1. **Development Flexibility**: AutoMaker is a development tool that needs to access various project directories chosen by the user. Strict path restrictions would limit its usefulness.
+### Behavior
 
-2. **User Control**: The application runs with the user's permissions. Users should have full control over which directories they work with.
+1. **When ALLOWED_ROOT_DIRECTORY is set**: Only paths within this directory (or DATA_DIR) are allowed. Attempts to access other paths will throw `PathNotAllowedError`.
 
-3. **Trust Model**: AutoMaker operates under a trust model where the user is assumed to be working on their own projects.
+2. **When ALLOWED_ROOT_DIRECTORY is not set**: All paths are allowed (backward compatibility mode).
 
-### Implications
+3. **DATA_DIR exception**: Paths within DATA_DIR are always allowed, even if outside ALLOWED_ROOT_DIRECTORY. This ensures settings and credentials are always accessible.
 
-- The allowed paths list is maintained for API compatibility but not enforced
-- All file system operations are performed with the user's full permissions
-- The tool does not impose artificial directory restrictions
+### Example Configuration
 
-### Re-enabling Security (Future)
+```bash
+# Docker/containerized environment
+ALLOWED_ROOT_DIRECTORY=/workspace
+DATA_DIR=/app/data
 
-If strict path validation is needed (e.g., for production deployments or untrusted environments):
+# Development (no restrictions)
+# Leave ALLOWED_ROOT_DIRECTORY unset for full access
+```
 
-1. Modify `isPathAllowed()` in `src/security.ts` to check against the allowed paths list
-2. Consider adding an environment variable `ENABLE_PATH_SECURITY=true`
-3. Implement additional security layers as needed
+### Secure File System
 
-The infrastructure is already in place; only the enforcement logic needs to be activated.
+The `secureFs` module wraps Node.js `fs` operations with path validation:
+
+```typescript
+import { secureFs } from '@automaker/platform';
+
+// All operations validate paths before execution
+await secureFs.readFile('/workspace/project/file.txt');
+await secureFs.writeFile('/workspace/project/output.txt', data);
+await secureFs.mkdir('/workspace/project/new-dir', { recursive: true });
+```
 
 ## Directory Structure
 

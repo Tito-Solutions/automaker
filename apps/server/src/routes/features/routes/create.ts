@@ -5,7 +5,6 @@
 import type { Request, Response } from "express";
 import { FeatureLoader } from "../../../services/feature-loader.js";
 import type { Feature } from "@automaker/types";
-import { addAllowedPath } from "@automaker/platform";
 import { getErrorMessage, logError } from "../common.js";
 
 export function createCreateHandler(featureLoader: FeatureLoader) {
@@ -17,17 +16,12 @@ export function createCreateHandler(featureLoader: FeatureLoader) {
       };
 
       if (!projectPath || !feature) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            error: "projectPath and feature are required",
-          });
+        res.status(400).json({
+          success: false,
+          error: "projectPath and feature are required",
+        });
         return;
       }
-
-      // Add project path to allowed paths
-      addAllowedPath(projectPath);
 
       const created = await featureLoader.create(projectPath, feature);
       res.json({ success: true, feature: created });

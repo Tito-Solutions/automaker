@@ -5,7 +5,7 @@
 import type { Request, Response } from "express";
 import fs from "fs/promises";
 import path from "path";
-import { addAllowedPath, isPathAllowed } from "@automaker/platform";
+import { isPathAllowed } from "@automaker/platform";
 import { getErrorMessage, logError } from "../common.js";
 
 export function createValidatePathHandler() {
@@ -30,9 +30,6 @@ export function createValidatePathHandler() {
             .json({ success: false, error: "Path is not a directory" });
           return;
         }
-
-        // Add to allowed paths
-        addAllowedPath(resolvedPath);
 
         res.json({
           success: true,

@@ -4,12 +4,17 @@
  */
 
 import path from "path";
-import fs from "fs/promises";
+import * as secureFs from "../lib/secure-fs.js";
 import type { EventEmitter } from "../lib/events.js";
 import type { ExecuteOptions } from "@automaker/types";
-import { readImageAsBase64, buildPromptWithImages, isAbortError } from "@automaker/utils";
+import {
+  readImageAsBase64,
+  buildPromptWithImages,
+  isAbortError,
+} from "@automaker/utils";
 import { ProviderFactory } from "../providers/provider-factory.js";
 import { createChatOptions } from "../lib/sdk-options.js";
+import { isPathAllowed, PathNotAllowedError } from "@automaker/platform";
 
 interface Message {
   id: string;
@@ -59,7 +64,7 @@ export class AgentService {
   }
 
   async initialize(): Promise<void> {
-    await fs.mkdir(this.stateDir, { recursive: true });
+    await secureFs.mkdir(this.stateDir, { recursive: true });
   }
 
   /**
@@ -77,11 +82,22 @@ export class AgentService {
       const metadata = await this.loadMetadata();
       const sessionMetadata = metadata[sessionId];
 
+      // Determine the effective working directory
+      const effectiveWorkingDirectory = workingDirectory || process.cwd();
+      const resolvedWorkingDirectory = path.resolve(effectiveWorkingDirectory);
+
+      // Validate that the working directory is allowed
+      if (!isPathAllowed(resolvedWorkingDirectory)) {
+        throw new Error(
+          `Working directory ${effectiveWorkingDirectory} is not allowed`
+        );
+      }
+
       this.sessions.set(sessionId, {
         messages,
         isRunning: false,
         abortController: null,
-        workingDirectory: workingDirectory || process.cwd(),
+        workingDirectory: resolvedWorkingDirectory,
         sdkSessionId: sessionMetadata?.sdkSessionId, // Load persisted SDK session ID
       });
     }
@@ -388,7 +404,7 @@ export class AgentService {
     const sessionFile = path.join(this.stateDir, `${sessionId}.json`);
 
     try {
-      const data = await fs.readFile(sessionFile, "utf-8");
+      const data = (await secureFs.readFile(sessionFile, "utf-8")) as string;
       return JSON.parse(data);
     } catch {
       return [];
@@ -399,7 +415,7 @@ export class AgentService {
     const sessionFile = path.join(this.stateDir, `${sessionId}.json`);
 
     try {
-      await fs.writeFile(
+      await secureFs.writeFile(
         sessionFile,
         JSON.stringify(messages, null, 2),
         "utf-8"
@@ -412,7 +428,10 @@ export class AgentService {
 
   async loadMetadata(): Promise<Record<string, SessionMetadata>> {
     try {
-      const data = await fs.readFile(this.metadataFile, "utf-8");
+      const data = (await secureFs.readFile(
+        this.metadataFile,
+        "utf-8"
+      )) as string;
       return JSON.parse(data);
     } catch {
       return {};
@@ -420,7 +439,7 @@ export class AgentService {
   }
 
   async saveMetadata(metadata: Record<string, SessionMetadata>): Promise<void> {
-    await fs.writeFile(
+    await secureFs.writeFile(
       this.metadataFile,
       JSON.stringify(metadata, null, 2),
       "utf-8"
@@ -458,11 +477,29 @@ export class AgentService {
     const sessionId = this.generateId();
     const metadata = await this.loadMetadata();
 
+    // Determine the effective working directory
+    const effectiveWorkingDirectory =
+      workingDirectory || projectPath || process.cwd();
+    const resolvedWorkingDirectory = path.resolve(effectiveWorkingDirectory);
+
+    // Validate that the working directory is allowed
+    if (!isPathAllowed(resolvedWorkingDirectory)) {
+      throw new PathNotAllowedError(effectiveWorkingDirectory);
+    }
+
+    // Validate that projectPath is allowed if provided
+    if (projectPath) {
+      const resolvedProjectPath = path.resolve(projectPath);
+      if (!isPathAllowed(resolvedProjectPath)) {
+        throw new PathNotAllowedError(projectPath);
+      }
+    }
+
     const session: SessionMetadata = {
       id: sessionId,
       name,
       projectPath,
-      workingDirectory: workingDirectory || projectPath || process.cwd(),
+      workingDirectory: resolvedWorkingDirectory,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       model,
@@ -521,7 +558,7 @@ export class AgentService {
     // Delete session file
     try {
       const sessionFile = path.join(this.stateDir, `${sessionId}.json`);
-      await fs.unlink(sessionFile);
+      await secureFs.unlink(sessionFile);
     } catch {
       // File may not exist
     }

@@ -32,9 +32,15 @@ export {
 
 // Security
 export {
+  PathNotAllowedError,
   initAllowedPaths,
-  addAllowedPath,
   isPathAllowed,
   validatePath,
+  isPathWithinDirectory,
+  getAllowedRootDirectory,
+  getDataDirectory,
   getAllowedPaths,
 } from './security.js';
+
+// Secure file system (validates paths before I/O operations)
+export * as secureFs from './secure-fs.js';

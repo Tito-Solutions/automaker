@@ -1,12 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import path from "path";
-import {
-  initAllowedPaths,
-  addAllowedPath,
-  isPathAllowed,
-  validatePath,
-  getAllowedPaths,
-} from "../src/security";
 
 describe("security.ts", () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -14,6 +7,8 @@ describe("security.ts", () => {
   beforeEach(() => {
     // Save original environment
     originalEnv = { ...process.env };
+    // Reset modules to get fresh state
+    vi.resetModules();
   });
 
   afterEach(() => {
@@ -22,217 +17,237 @@ describe("security.ts", () => {
   });
 
   describe("initAllowedPaths", () => {
-    it("should initialize from ALLOWED_PROJECT_DIRS environment variable", () => {
-      process.env.ALLOWED_PROJECT_DIRS = "/path/one,/path/two,/path/three";
+    it("should load ALLOWED_ROOT_DIRECTORY if set", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/projects";
+      delete process.env.DATA_DIR;
 
+      const { initAllowedPaths, getAllowedPaths } =
+        await import("../src/security");
       initAllowedPaths();
 
       const allowed = getAllowedPaths();
-      expect(allowed).toContain(path.resolve("/path/one"));
-      expect(allowed).toContain(path.resolve("/path/two"));
-      expect(allowed).toContain(path.resolve("/path/three"));
+      expect(allowed).toContain(path.resolve("/projects"));
     });
 
-    it("should trim whitespace from paths", () => {
-      process.env.ALLOWED_PROJECT_DIRS = " /path/one , /path/two , /path/three ";
-
-      initAllowedPaths();
-
-      const allowed = getAllowedPaths();
-      expect(allowed).toContain(path.resolve("/path/one"));
-      expect(allowed).toContain(path.resolve("/path/two"));
-      expect(allowed).toContain(path.resolve("/path/three"));
-    });
-
-    it("should skip empty paths", () => {
-      process.env.ALLOWED_PROJECT_DIRS = "/path/one,,/path/two,  ,/path/three";
-
-      initAllowedPaths();
-
-      const allowed = getAllowedPaths();
-      expect(allowed.length).toBeLessThanOrEqual(3);
-      expect(allowed).toContain(path.resolve("/path/one"));
-    });
-
-    it("should initialize from DATA_DIR environment variable", () => {
+    it("should load DATA_DIR if set", async () => {
+      delete process.env.ALLOWED_ROOT_DIRECTORY;
       process.env.DATA_DIR = "/data/directory";
 
+      const { initAllowedPaths, getAllowedPaths } =
+        await import("../src/security");
       initAllowedPaths();
 
       const allowed = getAllowedPaths();
       expect(allowed).toContain(path.resolve("/data/directory"));
     });
 
-    it("should initialize from WORKSPACE_DIR environment variable", () => {
-      process.env.WORKSPACE_DIR = "/workspace/directory";
-
-      initAllowedPaths();
-
-      const allowed = getAllowedPaths();
-      expect(allowed).toContain(path.resolve("/workspace/directory"));
-    });
-
-    it("should handle all environment variables together", () => {
-      process.env.ALLOWED_PROJECT_DIRS = "/projects/one,/projects/two";
+    it("should load both ALLOWED_ROOT_DIRECTORY and DATA_DIR if both set", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/projects";
       process.env.DATA_DIR = "/app/data";
-      process.env.WORKSPACE_DIR = "/app/workspace";
 
+      const { initAllowedPaths, getAllowedPaths } =
+        await import("../src/security");
       initAllowedPaths();
 
       const allowed = getAllowedPaths();
-      expect(allowed).toContain(path.resolve("/projects/one"));
-      expect(allowed).toContain(path.resolve("/projects/two"));
+      expect(allowed).toContain(path.resolve("/projects"));
       expect(allowed).toContain(path.resolve("/app/data"));
-      expect(allowed).toContain(path.resolve("/app/workspace"));
     });
 
-    it("should handle missing environment variables gracefully", () => {
-      delete process.env.ALLOWED_PROJECT_DIRS;
+    it("should handle missing environment variables gracefully", async () => {
+      delete process.env.ALLOWED_ROOT_DIRECTORY;
       delete process.env.DATA_DIR;
-      delete process.env.WORKSPACE_DIR;
 
+      const { initAllowedPaths } = await import("../src/security");
       expect(() => initAllowedPaths()).not.toThrow();
     });
   });
 
-  describe("addAllowedPath", () => {
-    it("should add a path to allowed list", () => {
-      const testPath = "/new/allowed/path";
-
-      addAllowedPath(testPath);
-
-      const allowed = getAllowedPaths();
-      expect(allowed).toContain(path.resolve(testPath));
-    });
-
-    it("should resolve relative paths to absolute", () => {
-      const relativePath = "relative/path";
-
-      addAllowedPath(relativePath);
-
-      const allowed = getAllowedPaths();
-      expect(allowed).toContain(path.resolve(relativePath));
-    });
-
-    it("should handle duplicate paths", () => {
-      const testPath = "/duplicate/path";
-
-      addAllowedPath(testPath);
-      addAllowedPath(testPath);
-
-      const allowed = getAllowedPaths();
-      const count = allowed.filter((p) => p === path.resolve(testPath)).length;
-      expect(count).toBe(1);
-    });
-  });
-
   describe("isPathAllowed", () => {
-    it("should always return true (all paths allowed)", () => {
+    it("should allow paths within ALLOWED_ROOT_DIRECTORY", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/allowed";
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, isPathAllowed } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      expect(isPathAllowed("/allowed/file.txt")).toBe(true);
+      expect(isPathAllowed("/allowed/subdir/file.txt")).toBe(true);
+    });
+
+    it("should deny paths outside ALLOWED_ROOT_DIRECTORY", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/allowed";
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, isPathAllowed } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      expect(isPathAllowed("/not-allowed/file.txt")).toBe(false);
+      expect(isPathAllowed("/etc/passwd")).toBe(false);
+    });
+
+    it("should always allow DATA_DIR paths", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/projects";
+      process.env.DATA_DIR = "/app/data";
+
+      const { initAllowedPaths, isPathAllowed } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      // DATA_DIR paths are always allowed
+      expect(isPathAllowed("/app/data/settings.json")).toBe(true);
+      expect(isPathAllowed("/app/data/credentials.json")).toBe(true);
+    });
+
+    it("should allow all paths when no restrictions configured", async () => {
+      delete process.env.ALLOWED_ROOT_DIRECTORY;
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, isPathAllowed } =
+        await import("../src/security");
+      initAllowedPaths();
+
       expect(isPathAllowed("/any/path")).toBe(true);
-      expect(isPathAllowed("/another/path")).toBe(true);
-      expect(isPathAllowed("relative/path")).toBe(true);
       expect(isPathAllowed("/etc/passwd")).toBe(true);
-      expect(isPathAllowed("../../../dangerous/path")).toBe(true);
     });
 
-    it("should return true even for non-existent paths", () => {
-      expect(isPathAllowed("/nonexistent/path/12345")).toBe(true);
-    });
+    it("should allow all paths when only DATA_DIR is configured", async () => {
+      delete process.env.ALLOWED_ROOT_DIRECTORY;
+      process.env.DATA_DIR = "/data";
 
-    it("should return true for empty string", () => {
-      expect(isPathAllowed("")).toBe(true);
+      const { initAllowedPaths, isPathAllowed } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      // DATA_DIR should be allowed
+      expect(isPathAllowed("/data/file.txt")).toBe(true);
+      // And all other paths should be allowed since no ALLOWED_ROOT_DIRECTORY restriction
+      expect(isPathAllowed("/any/path")).toBe(true);
     });
   });
 
   describe("validatePath", () => {
-    it("should resolve absolute paths", () => {
-      const absPath = "/absolute/path/to/file.txt";
-      const result = validatePath(absPath);
-      expect(result).toBe(path.resolve(absPath));
+    it("should return resolved path for allowed paths", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/allowed";
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, validatePath } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      const result = validatePath("/allowed/file.txt");
+      expect(result).toBe(path.resolve("/allowed/file.txt"));
     });
 
-    it("should resolve relative paths", () => {
-      const relPath = "relative/path/file.txt";
-      const result = validatePath(relPath);
-      expect(result).toBe(path.resolve(relPath));
+    it("should throw error for paths outside allowed directories", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/allowed";
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, validatePath, PathNotAllowedError } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      expect(() => validatePath("/not-allowed/file.txt")).toThrow(
+        PathNotAllowedError
+      );
     });
 
-    it("should handle current directory", () => {
-      const result = validatePath(".");
-      expect(result).toBe(path.resolve("."));
+    it("should resolve relative paths", async () => {
+      const cwd = process.cwd();
+      process.env.ALLOWED_ROOT_DIRECTORY = cwd;
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, validatePath } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      const result = validatePath("./file.txt");
+      expect(result).toBe(path.resolve(cwd, "./file.txt"));
     });
 
-    it("should handle parent directory", () => {
-      const result = validatePath("..");
-      expect(result).toBe(path.resolve(".."));
-    });
+    it("should not throw when no restrictions configured", async () => {
+      delete process.env.ALLOWED_ROOT_DIRECTORY;
+      delete process.env.DATA_DIR;
 
-    it("should handle complex relative paths", () => {
-      const complexPath = "../../some/nested/../path/./file.txt";
-      const result = validatePath(complexPath);
-      expect(result).toBe(path.resolve(complexPath));
-    });
+      const { initAllowedPaths, validatePath } =
+        await import("../src/security");
+      initAllowedPaths();
 
-    it("should handle paths with spaces", () => {
-      const pathWithSpaces = "/path with spaces/file.txt";
-      const result = validatePath(pathWithSpaces);
-      expect(result).toBe(path.resolve(pathWithSpaces));
-    });
-
-    it("should handle home directory expansion on Unix", () => {
-      if (process.platform !== "win32") {
-        const homePath = "~/documents/file.txt";
-        const result = validatePath(homePath);
-        expect(result).toBe(path.resolve(homePath));
-      }
+      expect(() => validatePath("/any/path")).not.toThrow();
     });
   });
 
   describe("getAllowedPaths", () => {
-    it("should return empty array initially", () => {
+    it("should return empty array when no paths configured", async () => {
+      delete process.env.ALLOWED_ROOT_DIRECTORY;
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, getAllowedPaths } =
+        await import("../src/security");
+      initAllowedPaths();
+
       const allowed = getAllowedPaths();
       expect(Array.isArray(allowed)).toBe(true);
+      expect(allowed).toHaveLength(0);
     });
 
-    it("should return array of added paths", () => {
-      addAllowedPath("/path/one");
-      addAllowedPath("/path/two");
+    it("should return configured paths", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/projects";
+      process.env.DATA_DIR = "/data";
+
+      const { initAllowedPaths, getAllowedPaths } =
+        await import("../src/security");
+      initAllowedPaths();
 
       const allowed = getAllowedPaths();
-      expect(allowed).toContain(path.resolve("/path/one"));
-      expect(allowed).toContain(path.resolve("/path/two"));
-    });
-
-    it("should return copy of internal set", () => {
-      addAllowedPath("/test/path");
-
-      const allowed1 = getAllowedPaths();
-      const allowed2 = getAllowedPaths();
-
-      expect(allowed1).not.toBe(allowed2);
-      expect(allowed1).toEqual(allowed2);
+      expect(allowed).toContain(path.resolve("/projects"));
+      expect(allowed).toContain(path.resolve("/data"));
     });
   });
 
-  describe("Path security disabled behavior", () => {
-    it("should allow unrestricted access despite allowed paths list", () => {
-      process.env.ALLOWED_PROJECT_DIRS = "/only/this/path";
+  describe("getAllowedRootDirectory", () => {
+    it("should return the configured root directory", async () => {
+      process.env.ALLOWED_ROOT_DIRECTORY = "/projects";
+
+      const { initAllowedPaths, getAllowedRootDirectory } =
+        await import("../src/security");
       initAllowedPaths();
 
-      // Should return true even for paths not in allowed list
-      expect(isPathAllowed("/some/other/path")).toBe(true);
-      expect(isPathAllowed("/completely/different/path")).toBe(true);
+      expect(getAllowedRootDirectory()).toBe(path.resolve("/projects"));
     });
 
-    it("should validate paths without permission checks", () => {
-      process.env.ALLOWED_PROJECT_DIRS = "/only/this/path";
+    it("should return null when not configured", async () => {
+      delete process.env.ALLOWED_ROOT_DIRECTORY;
+
+      const { initAllowedPaths, getAllowedRootDirectory } =
+        await import("../src/security");
       initAllowedPaths();
 
-      // Should validate any path without throwing
-      expect(() => validatePath("/some/other/path")).not.toThrow();
-      expect(validatePath("/some/other/path")).toBe(
-        path.resolve("/some/other/path")
-      );
+      expect(getAllowedRootDirectory()).toBeNull();
+    });
+  });
+
+  describe("getDataDirectory", () => {
+    it("should return the configured data directory", async () => {
+      process.env.DATA_DIR = "/data";
+
+      const { initAllowedPaths, getDataDirectory } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      expect(getDataDirectory()).toBe(path.resolve("/data"));
+    });
+
+    it("should return null when not configured", async () => {
+      delete process.env.DATA_DIR;
+
+      const { initAllowedPaths, getDataDirectory } =
+        await import("../src/security");
+      initAllowedPaths();
+
+      expect(getDataDirectory()).toBeNull();
     });
   });
 });
