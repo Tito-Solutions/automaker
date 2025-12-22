@@ -14,7 +14,7 @@ import { ThemeOption, themeOptions } from '@/config/theme-options';
 
 function RootLayoutContent() {
   const location = useLocation();
-  const { setIpcConnected, theme, currentProject, previewTheme, getEffectiveTheme } = useAppStore();
+  const { setIpcConnected, currentProject, getEffectiveTheme } = useAppStore();
   const { setupComplete } = useSetupStore();
   const navigate = useNavigate();
   const [isMounted, setIsMounted] = useState(false);
@@ -37,6 +37,10 @@ function RootLayoutContent() {
       }
       const role = activeElement.getAttribute('role');
       if (role === 'textbox' || role === 'searchbox' || role === 'combobox') {
+        return;
+      }
+      // Don't intercept when focused inside a terminal
+      if (activeElement.closest('.xterm') || activeElement.closest('[data-terminal-container]')) {
         return;
       }
     }

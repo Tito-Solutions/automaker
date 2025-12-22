@@ -11,10 +11,15 @@
 
 import { ProviderFactory } from '../providers/provider-factory.js';
 import type { ExecuteOptions, Feature } from '@automaker/types';
-import { buildPromptWithImages, isAbortError, classifyError } from '@automaker/utils';
+import {
+  buildPromptWithImages,
+  isAbortError,
+  classifyError,
+  loadContextFiles,
+} from '@automaker/utils';
 import { resolveModelString, DEFAULT_MODELS } from '@automaker/model-resolver';
 import { resolveDependencies, areDependenciesSatisfied } from '@automaker/dependency-resolver';
-import { getFeatureDir, getAutomakerDir, getFeaturesDir, getContextDir } from '@automaker/platform';
+import { getFeatureDir, getAutomakerDir, getFeaturesDir } from '@automaker/platform';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -549,7 +554,10 @@ export class AutoModeService {
       // Build the prompt - use continuation prompt if provided (for recovery after plan approval)
       let prompt: string;
       // Load project context files (CLAUDE.md, CODE_QUALITY.md, etc.) - passed as system prompt
-      const contextFiles = await this.loadContextFiles(projectPath);
+      const { formattedPrompt: contextFilesPrompt } = await loadContextFiles({
+        projectPath,
+        fsModule: secureFs as Parameters<typeof loadContextFiles>[0]['fsModule'],
+      });
 
       if (options?.continuationPrompt) {
         // Continuation prompt is used when recovering from a plan approval
@@ -595,19 +603,22 @@ export class AutoModeService {
           projectPath,
           planningMode: feature.planningMode,
           requirePlanApproval: feature.requirePlanApproval,
-          systemPrompt: contextFiles || undefined,
+          systemPrompt: contextFilesPrompt || undefined,
         }
       );
 
-      // Mark as waiting_approval for user review
-      await this.updateFeatureStatus(projectPath, featureId, 'waiting_approval');
+      // Determine final status based on testing mode:
+      // - skipTests=false (automated testing): go directly to 'verified' (no manual verify needed)
+      // - skipTests=true (manual verification): go to 'waiting_approval' for manual review
+      const finalStatus = feature.skipTests ? 'waiting_approval' : 'verified';
+      await this.updateFeatureStatus(projectPath, featureId, finalStatus);
 
       this.emitAutoModeEvent('auto_mode_feature_complete', {
         featureId,
         passes: true,
         message: `Feature completed in ${Math.round(
           (Date.now() - tempRunningFeature.startTime) / 1000
-        )}s`,
+        )}s${finalStatus === 'verified' ? ' - auto-verified' : ''}`,
         projectPath,
       });
     } catch (error) {
@@ -736,7 +747,10 @@ export class AutoModeService {
     }
 
     // Load project context files (CLAUDE.md, CODE_QUALITY.md, etc.) - passed as system prompt
-    const contextFiles = await this.loadContextFiles(projectPath);
+    const { formattedPrompt: contextFilesPrompt } = await loadContextFiles({
+      projectPath,
+      fsModule: secureFs as Parameters<typeof loadContextFiles>[0]['fsModule'],
+    });
 
     // Build complete prompt with feature info, previous context, and follow-up instructions
     let fullPrompt = `## Follow-up on Feature Implementation
@@ -864,17 +878,20 @@ Address the follow-up instructions above. Review the previous work and make the 
           projectPath,
           planningMode: 'skip', // Follow-ups don't require approval
           previousContent: previousContext || undefined,
-          systemPrompt: contextFiles || undefined,
+          systemPrompt: contextFilesPrompt || undefined,
         }
       );
 
-      // Mark as waiting_approval for user review
-      await this.updateFeatureStatus(projectPath, featureId, 'waiting_approval');
+      // Determine final status based on testing mode:
+      // - skipTests=false (automated testing): go directly to 'verified' (no manual verify needed)
+      // - skipTests=true (manual verification): go to 'waiting_approval' for manual review
+      const finalStatus = feature?.skipTests ? 'waiting_approval' : 'verified';
+      await this.updateFeatureStatus(projectPath, featureId, finalStatus);
 
       this.emitAutoModeEvent('auto_mode_feature_complete', {
         featureId,
         passes: true,
-        message: 'Follow-up completed successfully',
+        message: `Follow-up completed successfully${finalStatus === 'verified' ? ' - auto-verified' : ''}`,
         projectPath,
       });
     } catch (error) {
@@ -1041,63 +1058,6 @@ Address the follow-up instructions above. Review the previous work and make the 
       return true;
     } catch {
       return false;
-    }
-  }
-
-  /**
-   * Load context files from .automaker/context/ directory
-   * These are user-defined context files (CLAUDE.md, CODE_QUALITY.md, etc.)
-   * that provide project-specific rules and guidelines for the agent.
-   */
-  private async loadContextFiles(projectPath: string): Promise<string> {
-    // Use path.resolve for cross-platform absolute path handling
-    const contextDir = path.resolve(getContextDir(projectPath));
-
-    try {
-      // Check if directory exists first
-      await secureFs.access(contextDir);
-
-      const files = await secureFs.readdir(contextDir);
-      // Filter for text-based context files (case-insensitive for Windows)
-      const textFiles = files.filter((f) => {
-        const lower = f.toLowerCase();
-        return lower.endsWith('.md') || lower.endsWith('.txt');
-      });
-
-      if (textFiles.length === 0) return '';
-
-      const contents: string[] = [];
-      for (const file of textFiles) {
-        // Use path.join for cross-platform path construction
-        const filePath = path.join(contextDir, file);
-        const content = (await secureFs.readFile(filePath, 'utf-8')) as string;
-        contents.push(`## ${file}\n\n${content}`);
-      }
-
-      console.log(`[AutoMode] Loaded ${textFiles.length} context file(s): ${textFiles.join(', ')}`);
-
-      return `# ⚠️ CRITICAL: Project Context Files - READ AND FOLLOW STRICTLY
-
-**IMPORTANT**: The following context files contain MANDATORY project-specific rules and conventions. You MUST:
-1. Read these rules carefully before taking any action
-2. Follow ALL commands exactly as shown (e.g., if the project uses \`pnpm\`, NEVER use \`npm\` or \`npx\`)
-3. Follow ALL coding conventions, commit message formats, and architectural patterns specified
-4. Reference these rules before running ANY shell commands or making commits
-
-Failure to follow these rules will result in broken builds, failed CI, and rejected commits.
-
-${contents.join('\n\n---\n\n')}
-
----
-
-**REMINDER**: Before running any command, verify you are using the correct package manager and following the conventions above.
-
----
-
-`;
-    } catch {
-      // Context directory doesn't exist or is empty - this is fine
-      return '';
     }
   }
 
@@ -1652,15 +1612,17 @@ You can use the Read tool to view these images at any time during implementation
 `;
     }
 
-    prompt += `
+    // Add verification instructions based on testing mode
+    if (feature.skipTests) {
+      // Manual verification - just implement the feature
+      prompt += `
 ## Instructions
 
 Implement this feature by:
 1. First, explore the codebase to understand the existing structure
 2. Plan your implementation approach
 3. Write the necessary code changes
-4. Add or update tests as needed
-5. Ensure the code follows existing patterns and conventions
+4. Ensure the code follows existing patterns and conventions
 
 When done, wrap your final summary in <summary> tags like this:
 
@@ -1678,6 +1640,56 @@ When done, wrap your final summary in <summary> tags like this:
 </summary>
 
 This helps parse your summary correctly in the output logs.`;
+    } else {
+      // Automated testing - implement and verify with Playwright
+      prompt += `
+## Instructions
+
+Implement this feature by:
+1. First, explore the codebase to understand the existing structure
+2. Plan your implementation approach
+3. Write the necessary code changes
+4. Ensure the code follows existing patterns and conventions
+
+## Verification with Playwright (REQUIRED)
+
+After implementing the feature, you MUST verify it works correctly using Playwright:
+
+1. **Create a temporary Playwright test** to verify the feature works as expected
+2. **Run the test** to confirm the feature is working
+3. **Delete the test file** after verification - this is a temporary verification test, not a permanent test suite addition
+
+Example verification workflow:
+\`\`\`bash
+# Create a simple verification test
+npx playwright test my-verification-test.spec.ts
+
+# After successful verification, delete the test
+rm my-verification-test.spec.ts
+\`\`\`
+
+The test should verify the core functionality of the feature. If the test fails, fix the implementation and re-test.
+
+When done, wrap your final summary in <summary> tags like this:
+
+<summary>
+## Summary: [Feature Title]
+
+### Changes Implemented
+- [List of changes made]
+
+### Files Modified
+- [List of files]
+
+### Verification Status
+- [Describe how the feature was verified with Playwright]
+
+### Notes for Developer
+- [Any important notes]
+</summary>
+
+This helps parse your summary correctly in the output logs.`;
+    }
 
     return prompt;
   }
