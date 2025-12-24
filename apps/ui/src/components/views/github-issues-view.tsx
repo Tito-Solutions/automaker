@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   CircleDot,
   Loader2,
@@ -43,7 +43,7 @@ import { useAppStore } from '@/store/app-store';
 import { Button } from '@/components/ui/button';
 import { Markdown } from '@/components/ui/markdown';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { cn } from '@/lib/utils';
+import { cn, pathsEqual } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ValidationDialog } from './github-issues-view/validation-dialog';
 
@@ -64,7 +64,36 @@ export function GitHubIssuesView() {
   // Track revalidation confirmation dialog
   const [showRevalidateConfirm, setShowRevalidateConfirm] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const { currentProject, validationModel, muteDoneSound } = useAppStore();
+  const {
+    currentProject,
+    validationModel,
+    muteDoneSound,
+    defaultAIProfileId,
+    aiProfiles,
+    getCurrentWorktree,
+    worktreesByProject,
+  } = useAppStore();
+
+  // Get default AI profile for task creation
+  const defaultProfile = useMemo(() => {
+    if (!defaultAIProfileId) return null;
+    return aiProfiles.find((p) => p.id === defaultAIProfileId) ?? null;
+  }, [defaultAIProfileId, aiProfiles]);
+
+  // Get current branch from selected worktree
+  const currentBranch = useMemo(() => {
+    if (!currentProject?.path) return '';
+    const currentWorktreeInfo = getCurrentWorktree(currentProject.path);
+    const worktrees = worktreesByProject[currentProject.path] ?? [];
+    const currentWorktreePath = currentWorktreeInfo?.path ?? null;
+
+    const selectedWorktree =
+      currentWorktreePath === null
+        ? worktrees.find((w) => w.isMain)
+        : worktrees.find((w) => !w.isMain && pathsEqual(w.path, currentWorktreePath));
+
+    return selectedWorktree?.branch || worktrees.find((w) => w.isMain)?.branch || '';
+  }, [currentProject?.path, getCurrentWorktree, worktreesByProject]);
 
   const fetchIssues = useCallback(async () => {
     if (!currentProject?.path) {
@@ -393,9 +422,9 @@ export function GitHubIssuesView() {
             status: 'backlog' as const,
             passes: false,
             priority: getFeaturePriority(validation.estimatedComplexity),
-            model: 'opus' as const,
-            thinkingLevel: 'none' as const,
-            branchName: '',
+            model: defaultProfile?.model ?? 'opus',
+            thinkingLevel: defaultProfile?.thinkingLevel ?? 'none',
+            branchName: currentBranch,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
@@ -412,7 +441,7 @@ export function GitHubIssuesView() {
         toast.error(err instanceof Error ? err.message : 'Failed to create task');
       }
     },
-    [currentProject?.path]
+    [currentProject?.path, defaultProfile, currentBranch]
   );
 
   const formatDate = (dateString: string) => {
