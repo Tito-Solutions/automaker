@@ -23,7 +23,9 @@ import {
 import { getElectronAPI } from '@/lib/electron';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { BacklogPlanResult, BacklogChange } from '@automaker/types';
+import type { BacklogPlanResult, BacklogChange, ModelAlias, CursorModelId } from '@automaker/types';
+import { ModelOverrideTrigger } from '@/components/shared/model-override-trigger';
+import { useAppStore } from '@/store/app-store';
 
 interface BacklogPlanDialogProps {
   open: boolean;
@@ -53,6 +55,9 @@ export function BacklogPlanDialog({
   const [prompt, setPrompt] = useState('');
   const [expandedChanges, setExpandedChanges] = useState<Set<number>>(new Set());
   const [selectedChanges, setSelectedChanges] = useState<Set<number>>(new Set());
+  const [modelOverride, setModelOverride] = useState<ModelAlias | CursorModelId | null>(null);
+
+  const { phaseModels } = useAppStore();
 
   // Set mode based on whether we have a pending result
   useEffect(() => {
@@ -83,7 +88,9 @@ export function BacklogPlanDialog({
     // Start generation in background
     setIsGeneratingPlan(true);
 
-    const result = await api.backlogPlan.generate(projectPath, prompt);
+    // Use model override if set, otherwise use global default
+    const effectiveModel = modelOverride || phaseModels.backlogPlanningModel;
+    const result = await api.backlogPlan.generate(projectPath, prompt, effectiveModel);
     if (!result.success) {
       setIsGeneratingPlan(false);
       toast.error(result.error || 'Failed to start plan generation');
@@ -96,7 +103,7 @@ export function BacklogPlanDialog({
     });
     setPrompt('');
     onClose();
-  }, [projectPath, prompt, setIsGeneratingPlan, onClose]);
+  }, [projectPath, prompt, modelOverride, phaseModels, setIsGeneratingPlan, onClose]);
 
   const handleApply = useCallback(async () => {
     if (!pendingPlanResult) return;
@@ -358,13 +365,28 @@ export function BacklogPlanDialog({
     }
   };
 
+  // Get effective model (override or global default)
+  const effectiveModel = modelOverride || phaseModels.backlogPlanningModel;
+
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-primary" />
-            {mode === 'review' ? 'Review Plan' : 'Plan Backlog Changes'}
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wand2 className="w-5 h-5 text-primary" />
+              {mode === 'review' ? 'Review Plan' : 'Plan Backlog Changes'}
+            </div>
+            {mode === 'input' && (
+              <ModelOverrideTrigger
+                currentModel={effectiveModel}
+                onModelChange={setModelOverride}
+                phase="backlogPlanningModel"
+                size="sm"
+                variant="icon"
+                isOverridden={modelOverride !== null}
+              />
+            )}
           </DialogTitle>
           <DialogDescription>
             {mode === 'review'
