@@ -110,7 +110,7 @@ EXPOSE 3008
 
 # Health check (using curl since it's already installed, more reliable than busybox wget)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3008/api/health || exit 1
+    CMD curl -f https://automakerserver-production.up.railway.app/api/health || exit 1
 
 # Start server
 CMD ["node", "apps/server/dist/index.js"]
@@ -133,7 +133,7 @@ COPY apps/ui ./apps/ui
 # Build packages in dependency order, then build UI
 # VITE_SERVER_URL tells the UI where to find the API server
 # Use ARG to allow overriding at build time: --build-arg VITE_SERVER_URL=http://api.example.com
-ARG VITE_SERVER_URL=http://localhost:3008
+ARG VITE_SERVER_URL=https://automakerserver-production.up.railway.app
 ENV VITE_SKIP_ELECTRON=true
 ENV VITE_SERVER_URL=${VITE_SERVER_URL}
 RUN npm run build:packages && npm run build --workspace=apps/ui
